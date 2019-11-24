@@ -59,8 +59,6 @@ def dynprog(uniqueChars, subMatrix, seq1, seq2):
             if score > maxScore:
                 maxScore = score
                 maxScoreCoords = [columnStepper, rowStepper]
-    
-    print(maxScore)
 
     direction = ""
     x = maxScoreCoords[1]
@@ -74,14 +72,14 @@ def dynprog(uniqueChars, subMatrix, seq1, seq2):
     
     direction = backtrackingMatrix[x][y]
     
-    while not score == 0: 
+    while not score == 0:
         if direction == 1:
-            best_alignment[0] = seq2[x] + best_alignment[0]
+            best_alignment[0] = seq2[y] + best_alignment[0]
             best_alignment[1] = "-" + best_alignment[1]
             y -= 1
         elif direction == 2:
             best_alignment[0] =  "-" + best_alignment[0]
-            best_alignment[1] = seq1[y] + best_alignment[1]
+            best_alignment[1] = seq1[x] + best_alignment[1]
             x -=1
         elif direction == 3:
             best_alignment[0] = seq1[x] + best_alignment[0]
@@ -97,11 +95,10 @@ def dynprog(uniqueChars, subMatrix, seq1, seq2):
     stop = time.time()
     time_taken=stop-start
     print('Time taken: '+str(time_taken))
-    displayAlignment(best_alignment)
     
     if switched:
-        return seq2Indices, seq1Indices
-    return seq1Indices, seq2Indices
+        return best_score, seq2Indices, seq1Indices
+    return best_score, seq1Indices, seq2Indices
     
     
 
@@ -109,11 +106,14 @@ def dynproglin(uniqueChars, subMatrix, seq1, seq2):
     start = time.time()
     seq1 = " " + seq1
     seq2 = " " + seq2
+    switched = False
     
     if len(seq1) < len(seq2):
         temp = seq1
         seq1 = seq2
-        seg2 = temp
+        seq2 = temp
+        switched = True
+        
 
     charPosDict = {}
     for stepper in range (0, len(uniqueChars)):
@@ -125,25 +125,48 @@ def dynproglin(uniqueChars, subMatrix, seq1, seq2):
     maxScoreCoords = [0,0]
     maxScore = 0
 
-    maxScoreCoords = forwardPass(seq1, seq2,charPosDict, subMatrix )
+    maxScoreCoords, maxScore = forwardPass(seq1, seq2,charPosDict, subMatrix, False )
+    reversedSeq1 = reverseSeqByPos(seq1, maxScoreCoords[1])
+    reversedSeq2 = reverseSeqByPos(seq2, maxScoreCoords[0])
 
-    reversedSeq1 = reverseSeq(seq1, maxScoreCoords[1])
-    reversedSeq2 = reverseSeq(seq2, maxScoreCoords[0])
+    maxScoreCoords, _ = forwardPass(reversedSeq1, reversedSeq2,charPosDict, subMatrix, False)
+    localSeq1 = reverseSeqByPos(reversedSeq1, maxScoreCoords[1])
+    localSeq2 = reverseSeqByPos(reversedSeq2, maxScoreCoords[0])
 
-    maxScoreCoords = forwardPass(reversedSeq1, reversedSeq2,charPosDict, subMatrix)
+    best_alignment = globalAlignmentLin(localSeq1, localSeq2, charPosDict, subMatrix)
 
-    localSeq1 = reverseSeq(reversedSeq1, maxScoreCoords[1])
-    localSeq2 = reverseSeq(reversedSeq2, maxScoreCoords[0])
+    seq1Indices = []
+    seq2Indices = []
+    stepper = len(best_alignment[0]) - 1
+    maxScoreCoords[0] -= 1
+    maxScoreCoords[1] -= 1
     
-    print(localSeq1)
-    print(localSeq2)
 
-    #best_alignment = globalAligmentLin(cutSeq1, cutSeq2, charPosDict, subMatrix)
+    while stepper > -1:
+        if (best_alignment[0])[stepper] != "-" and (best_alignment[1])[stepper] != '-':
+            seq1Indices.insert(0, maxScoreCoords[1])
+            maxScoreCoords[1] -= 1
+            seq2Indices.insert(0, maxScoreCoords[0])
+            maxScoreCoords[0] -= 1
+        elif (best_alignment[0])[stepper] == "-":
+            maxScoreCoords[0] -= 1
+        else:
+            maxScoreCoords[1] -= 1
+        stepper -= 1
 
-def reverseSeq(seq, pos):
+    if switched:
+        return (maxScore, seq2Indices, seq1Indices)
+    else:
+        return (maxScore, seq1Indices, seq2Indices)
+
+def reverseSeqByPos(seq, pos):
     return (' ' + ''.join(reversed(seq[1:pos + 1])))
 
-def forwardPass(seq1, seq2,charPosDict, subMatrix):
+def reverseSeq(seq):
+    return ''.join(reversed(seq))
+
+def forwardPass(seq1, seq2,charPosDict, subMatrix, returnColumn):
+    seq1, seq2 = addSpace(seq1, seq2)
     
     scoringColumns = numpy.zeros([2, len(seq1)], dtype = int)
     maxScoreCoords = [0,0]
@@ -177,10 +200,122 @@ def forwardPass(seq1, seq2,charPosDict, subMatrix):
                 
         scoringColumns[0] = scoringColumns[1]
 
-    return maxScoreCoords
+    if returnColumn:
+        return scoringColumns[0]
+    else:
+        return maxScoreCoords, maxScore
 
-#def globalAlignmentLin(seq1, seq2, charPosDict, subMatrix):
+def globalAlignmentLin(seq1, seq2, charPosDict, subMatrix):
+    if len(seq1) > 0:
+        if seq1[0] == " ":
+            seq1 = seq1[1:]
+    if len(seq2) > 0:
+        if seq2[0] == " ":
+            seq2 = seq2[1:]
 
+    z = ""
+    w = ""
+    if len(seq1) == 0:
+        for stepper in range(0, len(seq2)):
+            z = z + "-"
+            w = w + seq2[stepper]
+    elif len(seq2) == 0:
+        for stepper in range(0, len(seq1)):
+            z = z + seq1[stepper]
+            w = w + "-"
+    elif len(seq1) == 1 or len(seq2) == 1:
+        (z, w) = needlemanWunsch(seq1, seq2, charPosDict, subMatrix)
+    else:
+        seq2Mid = len(seq2) // 2
+        columnL = forwardPass(seq1, seq2[0:seq2Mid], charPosDict, subMatrix, True)
+        columnL = columnL
+        columnR = forwardPass(reverseSeq(seq1),reverseSeq(seq2[seq2Mid:]), charPosDict, subMatrix, True)
+        columnR = columnR[::-1]
+        res_list = [columnL[i] + columnR[i] for i in range(len(columnL))]     
+        seq1Mid = numpy.argmax(res_list)
+        z1, w1 = globalAlignmentLin(seq1[:seq1Mid], seq2[0:seq2Mid], charPosDict, subMatrix)
+        z2, w2 = globalAlignmentLin(seq1[seq1Mid:], seq2[seq2Mid:], charPosDict, subMatrix)
+        z = z1 + z2
+        w = w1 + w2
+    return z,w
+
+def addSpace(seq1, seq2):
+    if seq1[0] != " ":
+        seq1 = " " + seq1
+    if seq2[0] != " ":
+        seq2 = " " + seq2
+    return seq1, seq2
+        
+
+def needlemanWunsch(seq1, seq2, charPosDict, subMatrix):
+    seq1, seq2 = addSpace(seq1, seq2)
+
+    switched = False
+    
+    if len(seq1) < len(seq2):
+        temp = seq1
+        seq1 = seq2
+        seq2 = temp
+        switched = True
+
+    charPos = charPosDict[seq2[1]]
+    
+    scoringMatrix = numpy.zeros([len(seq2), len(seq1)], dtype = int)
+    backtrackingMatrix = numpy.zeros([len(seq2), len(seq1)], dtype = int)
+    scoringMatrix[1, 0] = subMatrix[charPos][charPosDict["_"]]
+    backtrackingMatrix[1, 0] = 2
+    
+    for stepper in range(1, len(seq1)):
+        scoringMatrix[0, stepper] = subMatrix[charPosDict[seq1[stepper]]][charPosDict["_"]] + scoringMatrix[0][stepper - 1]
+        backtrackingMatrix[0, stepper] = 1
+
+    for columnStepper in range(1, len(seq1)):
+        seq1SubPos = charPosDict[seq1[columnStepper]]
+        
+        score = subMatrix[seq1SubPos][charPos] + scoringMatrix[0][columnStepper - 1]
+        scoringMatrix[1][columnStepper] = score
+        backtrackingMatrix[1][columnStepper] = 3
+        
+        upScore = subMatrix[charPos][charPosDict["_"]] + scoringMatrix[0][columnStepper]
+        
+        if upScore > score:
+            scoringMatrix[1][columnStepper] = upScore
+            backtrackingMatrix[1][columnStepper] = 2
+            score = upScore
+        leftScore = subMatrix[charPosDict["_"]][seq1SubPos] + scoringMatrix[1][columnStepper - 1]
+        
+        if leftScore > score:
+            scoringMatrix[1][columnStepper] = leftScore
+            backtrackingMatrix[1][columnStepper] = 1
+
+
+    best_alignment = ["",""]
+    x = 1
+    y = len(seq1) - 1
+    direction = backtrackingMatrix[x][y]
+    
+    while not direction == 0:
+        if direction == 1:
+            best_alignment[0] = seq1[y] + best_alignment[0]
+            best_alignment[1] = "-" + best_alignment[1]
+            y -= 1
+        elif direction == 2:
+            best_alignment[0] =  "-" + best_alignment[0]
+            best_alignment[1] = seq2[x] + best_alignment[1]
+            x -=1
+        elif direction == 3:
+            best_alignment[0] = seq1[y] + best_alignment[0]
+            best_alignment[1] = seq2[x] + best_alignment[1]
+            x -=1
+            y -=1
+        direction = backtrackingMatrix[x][y]
+
+    if switched:
+        return best_alignment[1], best_alignment[0]
+    return best_alignment
+
+    
+    
 def displayAlignment(alignment):
     string1 = alignment[0]
     string2 = alignment[1]
